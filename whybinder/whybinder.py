@@ -26,6 +26,7 @@ import random
 import sys
 import time
 import zlib
+import urllib.request
 from dataclasses import dataclass, asdict
 from datetime import datetime, date
 from pathlib import Path
@@ -42,12 +43,14 @@ try:
 except Exception:
     pyperclip = None
 
-from PySide6 import QtCore, QtGui, QtWidgets
+from PySide6 import QtCore, QtGui, QtWidgets, QtSvg
 
 APP_TITLE_1 = "Whybinder - софт для чатера MATRIX TEAM"
 APP_TITLE_2 = "powered by whynot_repow"
 APP_NAME = "whybinder"
 SHARE_PREFIX = "WB1:"
+APP_VERSION = "1.0.0"
+GITHUB_REPO = "whynot_repow/whybinder"
 
 # ---------- Runtime paths ----------
 def runtime_base_dir() -> Path:
@@ -74,45 +77,87 @@ DEFAULT_BIND_CATEGORY = "Без категории"
 
 # ---------- Themes ----------
 THEMES: dict[str, dict[str, str]] = {
-    "Ametrine": {"bg1": "#12062C", "bg2": "#220E70", "bg3": "#08255F", "surface": "rgba(8,6,18,0.34)", "accent": "rgba(160,120,255,0.32)"},
-    "Midnight": {"bg1": "#070716", "bg2": "#101036", "bg3": "#071B3A", "surface": "rgba(0,0,0,0.42)", "accent": "rgba(120,160,255,0.28)"},
-    "Pearl": {"bg1": "#EDEDF4", "bg2": "#E2E6FF", "bg3": "#D8F1FF", "surface": "rgba(255,255,255,0.58)", "accent": "rgba(80,140,255,0.22)"},
-    "Emerald": {"bg1": "#061A14", "bg2": "#0B2F23", "bg3": "#08392F", "surface": "rgba(0,0,0,0.34)", "accent": "rgba(70,220,170,0.22)"},
+    "Ametrine": {
+        "bg1": "#12062C", "bg2": "#220E70", "bg3": "#08255F",
+        "surface": "rgba(8,6,18,0.34)", "accent": "rgba(160,120,255,0.32)",
+        "text": "rgba(250,250,255,0.96)", "text2": "rgba(240,240,255,0.86)",
+        "border": "rgba(255,255,255,0.18)", "grain": "16", "shadow": "48", "radius": "16",
+    },
+    "Pearl": {
+        "bg1": "#EDEDF4", "bg2": "#E2E6FF", "bg3": "#D8F1FF",
+        "surface": "rgba(255,255,255,0.58)", "accent": "rgba(80,140,255,0.22)",
+        "text": "rgba(30,32,40,0.94)", "text2": "rgba(45,48,60,0.78)",
+        "border": "rgba(0,0,0,0.12)", "grain": "8", "shadow": "30", "radius": "14",
+    },
+    "Carbon": {
+        "bg1": "#06080F", "bg2": "#0E111A", "bg3": "#0B1528",
+        "surface": "rgba(6,8,12,0.50)", "accent": "rgba(120,140,160,0.26)",
+        "text": "rgba(240,244,255,0.96)", "text2": "rgba(210,214,230,0.82)",
+        "border": "rgba(255,255,255,0.12)", "grain": "20", "shadow": "60", "radius": "12",
+    },
+    "Aurora": {
+        "bg1": "#0A0E1F", "bg2": "#122437", "bg3": "#0A3A3B",
+        "surface": "rgba(6,10,16,0.38)", "accent": "rgba(90,220,210,0.26)",
+        "text": "rgba(240,255,250,0.96)", "text2": "rgba(210,238,234,0.82)",
+        "border": "rgba(255,255,255,0.16)", "grain": "14", "shadow": "54", "radius": "18",
+    },
+    "Neon": {
+        "bg1": "#120012", "bg2": "#28002E", "bg3": "#0E0033",
+        "surface": "rgba(12,0,18,0.46)", "accent": "rgba(255,80,240,0.26)",
+        "text": "rgba(255,245,255,0.96)", "text2": "rgba(235,215,245,0.82)",
+        "border": "rgba(255,255,255,0.18)", "grain": "18", "shadow": "62", "radius": "18",
+    },
+    "Rose": {
+        "bg1": "#2A0D14", "bg2": "#4B1527", "bg3": "#2B1638",
+        "surface": "rgba(20,8,14,0.40)", "accent": "rgba(255,140,180,0.26)",
+        "text": "rgba(255,245,250,0.96)", "text2": "rgba(235,220,230,0.82)",
+        "border": "rgba(255,255,255,0.18)", "grain": "12", "shadow": "48", "radius": "20",
+    },
 }
 
-def app_stylesheet(theme: str) -> str:
+def app_stylesheet(theme: str, density: str = "comfortable") -> str:
     t = THEMES.get(str(theme), THEMES["Ametrine"])
     accent = t["accent"]
     surface = t["surface"]
+    text = t["text"]
+    text2 = t["text2"]
 
     is_light = str(theme) == "Pearl"
-    text = "rgba(30,32,40,0.94)" if is_light else "rgba(250,250,255,0.96)"
-    text2 = "rgba(45,48,60,0.78)" if is_light else "rgba(240,240,255,0.86)"
     menu_bg = "rgba(245,245,255,0.98)" if is_light else "rgba(12, 10, 28, 0.98)"
     menu_border = "rgba(0,0,0,0.14)" if is_light else "rgba(255,255,255,0.16)"
-    btn_grad_top = "rgba(255,255,255,0.70)" if is_light else "rgba(255,255,255,0.22)"
-    btn_grad_bot = "rgba(255,255,255,0.40)" if is_light else "rgba(255,255,255,0.09)"
-    btn_border = "rgba(0,0,0,0.12)" if is_light else "rgba(255,255,255,0.18)"
+    btn_grad_top = "rgba(255,255,255,0.70)" if is_light else "rgba(255,255,255,0.20)"
+    btn_grad_bot = "rgba(255,255,255,0.36)" if is_light else "rgba(255,255,255,0.08)"
+    btn_border = t["border"]
+    radius = int(float(t.get("radius", "16")))
     field_border = "rgba(0,0,0,0.12)" if is_light else "rgba(255,255,255,0.14)"
     header_bg = "rgba(0,0,0,0.06)" if is_light else "rgba(255,255,255,0.10)"
+
+    dens = 0.86 if str(density) == "compact" else 1.0
+    pad_btn_y = int(10 * dens)
+    pad_btn_x = int(14 * dens)
+    pad_field_y = int(8 * dens)
+    pad_field_x = int(10 * dens)
+    menu_pad_y = int(10 * dens)
+    menu_pad_x = int(14 * dens)
 
     return f"""
     QWidget {{ background: transparent; }}
     * {{
         font-family: "Segoe UI Variable", "Segoe UI", "Inter", "Arial";
-        font-size: 13px;
+        font-size: {int(13 * dens)}px;
         color: {text};
-        font-weight: 800;
+        font-weight: 700;
+        letter-spacing: 0.2px;
     }}
-    QLabel#Title {{ font-size: 18px; font-weight: 900; letter-spacing: 0.2px; }}
-    QLabel#Hint {{ color: {text2}; font-weight: 800; }}
+    QLabel#Title {{ font-size: 18px; font-weight: 900; letter-spacing: 0.4px; }}
+    QLabel#Hint {{ color: {text2}; font-weight: 700; }}
 
     QPushButton, QToolButton {{
         font-weight: 900;
-        background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 {btn_grad_top}, stop:1 {btn_grad_bot});
+        background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 rgba(255,255,255,0.85), stop:0.45 {btn_grad_top}, stop:1 {btn_grad_bot});
         border: 1px solid {btn_border};
-        padding: 10px 14px;
-        border-radius: 16px;
+        padding: {pad_btn_y}px {pad_btn_x}px;
+        border-radius: {radius}px;
         min-height: 18px;
     }}
     QPushButton:hover, QToolButton:hover {{
@@ -123,15 +168,23 @@ def app_stylesheet(theme: str) -> str:
         background: {accent};
         border: 1px solid rgba(255,255,255,0.24);
     }}
+    QPushButton#Danger {{
+        background: rgba(255,80,110,0.24);
+        border: 1px solid rgba(255,120,140,0.40);
+    }}
+    QPushButton#Danger:hover {{
+        background: rgba(255,90,120,0.36);
+    }}
 
     QLineEdit, QPlainTextEdit, QComboBox, QListWidget, QTableWidget {{
         background: {surface};
         border: 1px solid {field_border};
-        border-radius: 12px;
-        padding: 8px 10px;
+        border-radius: {max(10, radius - 4)}px;
+        padding: {pad_field_y}px {pad_field_x}px;
         selection-background-color: {accent};
     }}
     QAbstractScrollArea::viewport {{ background: {surface}; }}
+    QListWidget::item:hover {{ background: {accent}; border-radius: 8px; }}
 
     QHeaderView::section {{
         background: {header_bg};
@@ -144,12 +197,18 @@ def app_stylesheet(theme: str) -> str:
     QMenu {{
         background: {menu_bg};
         border: 1px solid {menu_border};
-        border-radius: 14px;
+        border-radius: {max(12, radius)}px;
         padding: 8px;
     }}
-    QMenu::item {{ padding: 10px 14px; border-radius: 10px; font-weight: 900; }}
+    QMenu::item {{ padding: {menu_pad_y}px {menu_pad_x}px; border-radius: 10px; font-weight: 900; }}
     QMenu::item:selected {{ background: {accent}; }}
     QMenu::separator {{ height: 1px; background: {menu_border}; margin: 6px 8px; }}
+    QComboBox QAbstractItemView {{
+        border-radius: {max(12, radius)}px;
+        background: {menu_bg};
+        border: 1px solid {menu_border};
+        selection-background-color: {accent};
+    }}
 
     QCheckBox::indicator {{
         width: 18px; height: 18px;
@@ -158,6 +217,28 @@ def app_stylesheet(theme: str) -> str:
         background: rgba(0,0,0,0.10);
     }}
     QCheckBox::indicator:checked {{ background: {accent}; }}
+    QTableWidget::item:hover {{ background: {accent}; }}
+    QTableWidget::item:selected {{ background: {accent}; }}
+    QWidget#Toast {{
+        background: rgba(8, 6, 20, 0.78);
+        border: 1px solid rgba(255,255,255,0.20);
+        border-radius: 12px;
+    }}
+    QFrame#Card {{
+        background: rgba(255,255,255,0.08);
+        border: 1px solid {btn_border};
+        border-radius: {max(12, radius)}px;
+    }}
+    QFrame#OnboardingCard {{
+        background: rgba(18, 18, 32, 0.96);
+        border: 1px solid rgba(255,255,255,0.20);
+        border-radius: 18px;
+    }}
+    QFrame#ProfileOverlayCard {{
+        background: rgba(20, 22, 36, 0.98);
+        border: 1px solid rgba(255,255,255,0.26);
+        border-radius: 16px;
+    }}
     """
 
 
@@ -181,22 +262,101 @@ def read_price_text() -> str:
 
 
 
+_GRAIN_CACHE: dict[int, QtGui.QPixmap] = {}
+
+def _grain_pixmap(strength: int = 16, size: int = 128) -> QtGui.QPixmap:
+    cached = _GRAIN_CACHE.get(strength)
+    if cached:
+        return cached
+    img = QtGui.QImage(size, size, QtGui.QImage.Format_ARGB32_Premultiplied)
+    img.fill(QtCore.Qt.transparent)
+    rnd = QtCore.QRandomGenerator.global_()
+    for y in range(size):
+        for x in range(size):
+            a = int(rnd.bounded(strength))
+            if a == 0:
+                continue
+            v = 255 if rnd.bounded(2) == 0 else 0
+            img.setPixelColor(x, y, QtGui.QColor(v, v, v, a))
+    pm = QtGui.QPixmap.fromImage(img)
+    _GRAIN_CACHE[strength] = pm
+    return pm
+
 def _draw_grain(p: QtGui.QPainter, rect: QtCore.QRect, strength: int = 16, step: int = 3):
     try:
-        rnd = QtCore.QRandomGenerator.global_()
+        pm = _grain_pixmap(strength=strength)
         p.save()
-        p.setPen(QtCore.Qt.NoPen)
-        for y in range(rect.top(), rect.bottom(), step):
-            for x in range(rect.left(), rect.right(), step):
-                a = int(rnd.bounded(strength))
-                if a == 0:
-                    continue
-                c = QtGui.QColor(255, 255, 255, a) if rnd.bounded(2) == 0 else QtGui.QColor(0, 0, 0, a)
-                p.setBrush(QtGui.QBrush(c))
-                p.drawRect(x, y, 1, 1)
+        p.setOpacity(0.22)
+        for y in range(rect.top(), rect.bottom(), pm.height()):
+            for x in range(rect.left(), rect.right(), pm.width()):
+                p.drawPixmap(x, y, pm)
         p.restore()
     except Exception:
         pass
+
+def smooth_menu(menu: QtWidgets.QMenu):
+    try:
+        menu.setWindowFlag(QtCore.Qt.FramelessWindowHint, True)
+        menu.setAttribute(QtCore.Qt.WA_TranslucentBackground, True)
+        menu.setContentsMargins(2, 2, 2, 2)
+    except Exception:
+        pass
+
+def _parse_rgba(value: str) -> QtGui.QColor:
+    v = (value or "").strip()
+    if v.startswith("rgba"):
+        raw = v[v.find("(") + 1:v.find(")")]
+        parts = [p.strip() for p in raw.split(",")]
+        if len(parts) == 4:
+            r, g, b = (int(float(parts[i])) for i in range(3))
+            a = float(parts[3])
+            return QtGui.QColor(r, g, b, int(255 * a))
+    c = QtGui.QColor()
+    c.setNamedColor(v)
+    return c if c.isValid() else QtGui.QColor(140, 160, 255, 120)
+
+_SVG_ICONS = {
+    "menu": '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="white"><rect x="3" y="5" width="14" height="2" rx="1"/><rect x="3" y="9" width="14" height="2" rx="1"/><rect x="3" y="13" width="14" height="2" rx="1"/></svg>',
+    "add": '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="white"><rect x="9" y="4" width="2" height="12"/><rect x="4" y="9" width="12" height="2"/></svg>',
+    "edit": '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="white"><path d="M5 14l1.5-4.5L13 3l4 4-6.5 6.5L5 14z"/></svg>',
+    "delete": '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="white"><rect x="6" y="7" width="8" height="9" rx="1"/><rect x="5" y="5" width="10" height="2"/><rect x="8" y="3" width="4" height="2"/></svg>',
+    "copy": '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="white"><rect x="6" y="6" width="9" height="9" rx="1"/><rect x="4" y="4" width="9" height="9" rx="1" fill="none" stroke="white" stroke-width="1.5"/></svg>',
+    "search": '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" stroke="white" stroke-width="2"><circle cx="9" cy="9" r="5"/><line x1="13" y1="13" x2="17" y2="17"/></svg>',
+    "dollar": '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" stroke="white" stroke-width="2"><path d="M10 3v14"/><path d="M6 7c0-2 8-2 8 0s-8 2-8 4 8 2 8 4-8 2-8 0"/></svg>',
+}
+
+def icon_svg(name: str) -> QtGui.QIcon:
+    svg = _SVG_ICONS.get(name, "")
+    pix = QtGui.QPixmap(20, 20)
+    pix.fill(QtCore.Qt.transparent)
+    renderer = QtSvg.QSvgRenderer(QtCore.QByteArray(svg.encode("utf-8")))
+    p = QtGui.QPainter(pix)
+    renderer.render(p)
+    p.end()
+    return QtGui.QIcon(pix)
+
+class HoverGlow(QtCore.QObject):
+    def __init__(self, color_getter):
+        super().__init__()
+        self._color_getter = color_getter
+
+    def eventFilter(self, obj, event):
+        if isinstance(obj, (QtWidgets.QPushButton, QtWidgets.QToolButton)):
+            if event.type() == QtCore.QEvent.Enter:
+                try:
+                    eff = QtWidgets.QGraphicsDropShadowEffect(obj)
+                    eff.setBlurRadius(24)
+                    eff.setOffset(0, 0)
+                    eff.setColor(self._color_getter())
+                    obj.setGraphicsEffect(eff)
+                except Exception:
+                    pass
+            elif event.type() == QtCore.QEvent.Leave:
+                try:
+                    obj.setGraphicsEffect(None)
+                except Exception:
+                    pass
+        return super().eventFilter(obj, event)
 
 
 # ---------- Utils ----------
@@ -266,7 +426,7 @@ def decode_share(code: str) -> dict:
 # ---------- Models ----------
 @dataclass
 class Bind:
-    kind: str               # "hotkey"
+    kind: str               # "hotkey" | "text"
     key: str                # e.g. "F10+1"
     text: str
     mode: str = "paste"     # "paste" or "type"
@@ -520,6 +680,87 @@ class Anim:
         a.setEasingCurve(QtCore.QEasingCurve.OutCubic)
         a.start(QtCore.QAbstractAnimation.DeleteWhenStopped)
 
+    @staticmethod
+    def menu_pop(menu: QtWidgets.QMenu):
+        def run():
+            eff = menu.graphicsEffect()
+            if not isinstance(eff, QtWidgets.QGraphicsOpacityEffect):
+                eff = QtWidgets.QGraphicsOpacityEffect(menu)
+                menu.setGraphicsEffect(eff)
+            eff.setOpacity(0.0)
+            geo = menu.geometry()
+            start = QtCore.QRect(geo.x() + 10, geo.y() + 10, max(1, geo.width() - 20), max(1, geo.height() - 20))
+            a1 = QtCore.QPropertyAnimation(eff, b"opacity", menu)
+            a1.setStartValue(0.0); a1.setEndValue(1.0)
+            a1.setDuration(140)
+            a1.setEasingCurve(QtCore.QEasingCurve.OutCubic)
+            a2 = QtCore.QPropertyAnimation(menu, b"geometry", menu)
+            a2.setStartValue(start); a2.setEndValue(geo)
+            a2.setDuration(160)
+            a2.setEasingCurve(QtCore.QEasingCurve.OutCubic)
+            group = QtCore.QParallelAnimationGroup(menu)
+            group.addAnimation(a1); group.addAnimation(a2)
+            group.start(QtCore.QAbstractAnimation.DeleteWhenStopped)
+        QtCore.QTimer.singleShot(0, run)
+
+    @staticmethod
+    def slide_out(widget: QtWidgets.QWidget, dy=10, ms=180):
+        start = widget.pos()
+        end = start + QtCore.QPoint(0, dy)
+        a = QtCore.QPropertyAnimation(widget, b"pos", widget)
+        a.setStartValue(start); a.setEndValue(end)
+        a.setDuration(ms)
+        a.setEasingCurve(QtCore.QEasingCurve.InCubic)
+        a.start(QtCore.QAbstractAnimation.DeleteWhenStopped)
+
+    @staticmethod
+    def motion_blur(widget: QtWidgets.QWidget, ms: int = 200):
+        try:
+            eff = QtWidgets.QGraphicsBlurEffect(widget)
+            eff.setBlurRadius(8)
+            widget.setGraphicsEffect(eff)
+            anim = QtCore.QPropertyAnimation(eff, b"blurRadius", widget)
+            anim.setDuration(ms)
+            anim.setStartValue(8)
+            anim.setEndValue(0)
+            anim.setEasingCurve(QtCore.QEasingCurve.OutCubic)
+            anim.finished.connect(lambda: widget.setGraphicsEffect(None))
+            anim.start(QtCore.QAbstractAnimation.DeleteWhenStopped)
+        except Exception:
+            pass
+
+    @staticmethod
+    def shake(widget: QtWidgets.QWidget, dist: int = 6, ms: int = 240):
+        try:
+            pos = widget.pos()
+            anim = QtCore.QPropertyAnimation(widget, b"pos", widget)
+            anim.setDuration(ms)
+            anim.setKeyValueAt(0.0, pos)
+            anim.setKeyValueAt(0.2, pos + QtCore.QPoint(-dist, 0))
+            anim.setKeyValueAt(0.4, pos + QtCore.QPoint(dist, 0))
+            anim.setKeyValueAt(0.6, pos + QtCore.QPoint(-dist, 0))
+            anim.setKeyValueAt(0.8, pos + QtCore.QPoint(dist, 0))
+            anim.setKeyValueAt(1.0, pos)
+            anim.setEasingCurve(QtCore.QEasingCurve.OutCubic)
+            anim.start(QtCore.QAbstractAnimation.DeleteWhenStopped)
+        except Exception:
+            pass
+
+    @staticmethod
+    def bounce(widget: QtWidgets.QWidget, ms: int = 220):
+        try:
+            start = widget.geometry()
+            grow = QtCore.QRect(start.x() - 2, start.y() - 2, start.width() + 4, start.height() + 4)
+            anim = QtCore.QPropertyAnimation(widget, b"geometry", widget)
+            anim.setDuration(ms)
+            anim.setStartValue(start)
+            anim.setKeyValueAt(0.5, grow)
+            anim.setEndValue(start)
+            anim.setEasingCurve(QtCore.QEasingCurve.OutBack)
+            anim.start(QtCore.QAbstractAnimation.DeleteWhenStopped)
+        except Exception:
+            pass
+
 # ---------- Glass root ----------
 class GlassRoot(QtWidgets.QFrame):
     def __init__(self, get_theme, parent=None):
@@ -527,15 +768,21 @@ class GlassRoot(QtWidgets.QFrame):
         self.setObjectName("GlassRoot")
         self._get_theme = get_theme
         self.setAttribute(QtCore.Qt.WA_TranslucentBackground, True)
+        self.setAttribute(QtCore.Qt.WA_NoSystemBackground, True)
+        self.setAttribute(QtCore.Qt.WA_OpaquePaintEvent, False)
 
     def paintEvent(self, e: QtGui.QPaintEvent):
         p = QtGui.QPainter(self)
+        if not p.isActive():
+            return
         p.setRenderHint(QtGui.QPainter.Antialiasing, True)
         r = self.rect().adjusted(1, 1, -1, -1)
-        path = QtGui.QPainterPath()
-        path.addRoundedRect(QtCore.QRectF(r), 18.0, 18.0)
 
         t = THEMES.get(str(self._get_theme()), THEMES["Ametrine"])
+        radius = float(t.get("radius", "16"))
+        path = QtGui.QPainterPath()
+        path.addRoundedRect(QtCore.QRectF(r), radius, radius)
+
         grad = QtGui.QLinearGradient(r.topLeft(), r.bottomRight())
         grad.setColorAt(0.0, QtGui.QColor(t["bg1"]))
         grad.setColorAt(0.45, QtGui.QColor(t["bg2"]))
@@ -552,6 +799,13 @@ class GlassRoot(QtWidgets.QFrame):
         p.setPen(pen)
         p.drawPath(path)
 
+        try:
+            strength = int(t.get("grain", "12"))
+            _draw_grain(p, r, strength=strength, step=3)
+        except Exception:
+            pass
+        p.end()
+
 # ---------- TitleBar ----------
 class TitleBar(QtWidgets.QWidget):
     def __init__(self, parent=None):
@@ -559,7 +813,7 @@ class TitleBar(QtWidgets.QWidget):
         self._drag = None
         self.lbl = QtWidgets.QLabel("whybinder")
         self.lbl.setObjectName("Title")
-        self.btn_theme = QtWidgets.QToolButton(); self.btn_theme.setText("🎨"); self.btn_theme.setFixedWidth(48)
+        self.btn_theme = QtWidgets.QToolButton(); self.btn_theme.setIcon(icon_svg("menu")); self.btn_theme.setFixedWidth(48)
         self.btn_min = QtWidgets.QToolButton(); self.btn_min.setText("—"); self.btn_min.setFixedWidth(48)
         self.btn_close = QtWidgets.QToolButton(); self.btn_close.setText("✕"); self.btn_close.setFixedWidth(48)
 
@@ -617,9 +871,162 @@ class GlassDialog(QtWidgets.QDialog):
         rlay.addLayout(top)
         rlay.addWidget(self.body, 1)
 
+class ProfileOverlay(QtWidgets.QFrame):
+    def __init__(self, mw: 'MainWindow'):
+        super().__init__(None)
+        self.mw = mw
+        self._drag = None
+        self.setWindowFlags(QtCore.Qt.FramelessWindowHint | QtCore.Qt.Tool | QtCore.Qt.WindowStaysOnTopHint)
+        self.setAttribute(QtCore.Qt.WA_TranslucentBackground, True)
+        self.setObjectName("ProfileOverlay")
+
+        self.root = QtWidgets.QFrame(self)
+        self.root.setObjectName("ProfileOverlayCard")
+        lay = QtWidgets.QHBoxLayout(self.root)
+        lay.setContentsMargins(12, 10, 12, 10)
+        lbl = QtWidgets.QLabel("Профиль:")
+        self.cmb = QtWidgets.QComboBox()
+        self.cmb.addItems(DEFAULT_PROFILES)
+        self.cmb.setCurrentText(self.mw.cmb_profile.currentText())
+        lay.addWidget(lbl)
+        lay.addWidget(self.cmb)
+
+        outer = QtWidgets.QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.addWidget(self.root)
+
+        self.cmb.currentTextChanged.connect(self._switch)
+
+    def _switch(self, name: str):
+        try:
+            self.mw.cmb_profile.setCurrentText(name)
+        except Exception:
+            pass
+
+    def showEvent(self, e):
+        super().showEvent(e)
+        try:
+            screen = QtGui.QGuiApplication.primaryScreen().availableGeometry()
+            self.adjustSize()
+            self.move(screen.right() - self.width() - 24, screen.top() + 24)
+        except Exception:
+            pass
+
+    def mousePressEvent(self, e: QtGui.QMouseEvent):
+        if e.button() == QtCore.Qt.LeftButton:
+            self._drag = e.globalPosition().toPoint()
+            e.accept()
+
+    def mouseMoveEvent(self, e: QtGui.QMouseEvent):
+        if self._drag and (e.buttons() & QtCore.Qt.LeftButton):
+            delta = e.globalPosition().toPoint() - self._drag
+            self.move(self.pos() + delta)
+            self._drag = e.globalPosition().toPoint()
+            e.accept()
+
+    def mouseReleaseEvent(self, e: QtGui.QMouseEvent):
+        self._drag = None
+
     def showEvent(self, e):
         super().showEvent(e)
         Anim.fade(self, 0.0, 1.0, 220)
+        Anim.pop(self, 180)
+        try:
+            Anim.slide_in(self.root, dx=12, ms=180)
+        except Exception:
+            pass
+
+class ConfirmDialog(GlassDialog):
+    def __init__(self, get_theme, parent=None, title="Подтверждение", message=""):
+        super().__init__(get_theme, parent, 420, 220, title)
+        lay = QtWidgets.QVBoxLayout(self.body)
+        lbl = QtWidgets.QLabel(message)
+        lbl.setWordWrap(True)
+        lay.addWidget(lbl, 1)
+        btns = QtWidgets.QHBoxLayout()
+        btn_cancel = QtWidgets.QPushButton("Отмена")
+        btn_ok = QtWidgets.QPushButton("Ок")
+        btns.addStretch(1)
+        btns.addWidget(btn_cancel)
+        btns.addWidget(btn_ok)
+        lay.addLayout(btns)
+        btn_cancel.clicked.connect(self.reject)
+        btn_ok.clicked.connect(self.accept)
+
+class InputDialog(GlassDialog):
+    def __init__(self, get_theme, parent=None, title="Ввод", label="Название:", text=""):
+        super().__init__(get_theme, parent, 480, 220, title)
+        lay = QtWidgets.QVBoxLayout(self.body)
+        lay.addWidget(QtWidgets.QLabel(label))
+        self.edit = QtWidgets.QLineEdit()
+        self.edit.setText(text or "")
+        lay.addWidget(self.edit)
+        btns = QtWidgets.QHBoxLayout()
+        btn_cancel = QtWidgets.QPushButton("Отмена")
+        btn_ok = QtWidgets.QPushButton("Ок")
+        btns.addStretch(1)
+        btns.addWidget(btn_cancel)
+        btns.addWidget(btn_ok)
+        lay.addLayout(btns)
+        btn_cancel.clicked.connect(self.reject)
+        btn_ok.clicked.connect(self.accept)
+
+    def get(self) -> str:
+        return self.edit.text().strip()
+
+class UpdateOverlay(QtWidgets.QFrame):
+    def __init__(self, mw: 'MainWindow'):
+        super().__init__(mw)
+        self.mw = mw
+        self.setAttribute(QtCore.Qt.WA_TranslucentBackground, True)
+        self.setGeometry(mw.rect())
+
+        self.card = QtWidgets.QFrame(self)
+        self.card.setObjectName("OnboardingCard")
+        self.card.setFixedSize(420, 220)
+        v = QtWidgets.QVBoxLayout(self.card)
+        self.title = QtWidgets.QLabel(APP_NAME)
+        self.title.setObjectName("Title")
+        self.title.setAlignment(QtCore.Qt.AlignCenter)
+        self.progress = QtWidgets.QProgressBar()
+        self.progress.setRange(0, 100)
+        self.progress.setValue(0)
+        v.addWidget(self.title)
+        v.addWidget(self.progress)
+        v.addStretch(1)
+
+        self._timer = QtCore.QTimer(self)
+        self._timer.timeout.connect(self._pulse)
+        self._pulse_dir = 1
+        self._alpha = 180
+        self._timer.start(30)
+        self.show()
+        self.raise_()
+        self._center()
+
+    def resizeEvent(self, e):
+        super().resizeEvent(e)
+        self.setGeometry(self.mw.rect())
+        self._center()
+
+    def _center(self):
+        self.card.move(
+            (self.width() - self.card.width()) // 2,
+            (self.height() - self.card.height()) // 2,
+        )
+
+    def _pulse(self):
+        self._alpha += 4 * self._pulse_dir
+        if self._alpha > 235 or self._alpha < 160:
+            self._pulse_dir *= -1
+        self.title.setStyleSheet(f"QLabel{{color: rgba(255,255,255,{self._alpha});}}")
+
+    def set_progress(self, value: int):
+        self.progress.setValue(value)
+
+    def paintEvent(self, e):
+        p = QtGui.QPainter(self)
+        p.fillRect(self.rect(), QtGui.QColor(6, 6, 16, 160))
 
 class BindEditor(GlassDialog):
     def __init__(self, get_theme, parent=None, bind_obj: Optional[Bind]=None, categories: Optional[list[str]]=None):
@@ -630,7 +1037,7 @@ class BindEditor(GlassDialog):
         form = QtWidgets.QFormLayout(self.body)
         form.setLabelAlignment(QtCore.Qt.AlignRight)
 
-        self.cmb_kind = QtWidgets.QComboBox(); self.cmb_kind.addItems(["hotkey"])
+        self.cmb_kind = QtWidgets.QComboBox(); self.cmb_kind.addItems(["hotkey", "text"])
         self.ed_key = QtWidgets.QLineEdit()
         self.cmb_mode = QtWidgets.QComboBox(); self.cmb_mode.addItems(["paste", "type"])
         self.cmb_cat = QtWidgets.QComboBox(); self.cmb_cat.addItems(cats)
@@ -671,7 +1078,8 @@ class BindEditor(GlassDialog):
         key = self.ed_key.text().strip()
         text = self.txt.toPlainText().rstrip()
         if not key:
-            QtWidgets.QMessageBox.warning(self, "Ошибка", "Укажи триггер (клавиши).")
+            Toast(self, "Укажи триггер (клавиши).", kind="error").show_toast()
+            Anim.shake(self.ed_key)
             return
         self.result_bind = Bind(
             kind=self.cmb_kind.currentText(),
@@ -708,6 +1116,201 @@ class TextEditor(GlassDialog):
     def get(self) -> tuple[str, str]:
         return self.ed.toPlainText().rstrip(), self.hint.text().strip()
 
+class SpotlightDialog(GlassDialog):
+    def __init__(self, mw: 'MainWindow'):
+        super().__init__(mw.get_theme, mw, 720, 420, "Поиск")
+        self.mw = mw
+        lay = QtWidgets.QVBoxLayout(self.body)
+        self.query = QtWidgets.QLineEdit()
+        self.query.setPlaceholderText("Поиск по биндам, категориям, PPV, рассылкам…")
+        self.list = QtWidgets.QListWidget()
+        lay.addWidget(self.query)
+        lay.addWidget(self.list, 1)
+        self.query.textChanged.connect(self._refresh)
+        self.list.itemActivated.connect(self._open_item)
+        self._items: list[dict[str, Any]] = []
+        self._refresh("")
+
+    def _collect(self) -> list[dict[str, Any]]:
+        out: list[dict[str, Any]] = []
+        for b in self.mw.binds:
+            out.append({"type": "bind", "key": b.key, "category": b.category, "text": b.text})
+        for area in ("ppv", "mailing"):
+            for cat in self.mw.content_db.categories(area):
+                for it in self.mw.content_db.items(area, cat):
+                    out.append({"type": area, "category": cat, "text": it.get("text", ""), "id": it.get("id")})
+        return out
+
+    def _refresh(self, q: str):
+        self.list.clear()
+        q = (q or "").strip().lower()
+        items = self._collect()
+        self._items = []
+        for it in items:
+            blob = " ".join(str(v) for v in it.values()).lower()
+            if q and q not in blob:
+                continue
+            label = ""
+            if it["type"] == "bind":
+                label = f"Бинд • {it['category']} • {it['key']} — {it['text'][:60]}"
+            elif it["type"] == "ppv":
+                label = f"PPV • {it['category']} — {it['text'][:60]}"
+            else:
+                label = f"Рассылка • {it['category']} — {it['text'][:60]}"
+            self.list.addItem(label)
+            self._items.append(it)
+
+    def _open_item(self, item: QtWidgets.QListWidgetItem):
+        row = self.list.row(item)
+        if not (0 <= row < len(self._items)):
+            return
+        it = self._items[row]
+        if it["type"] == "bind":
+            self.mw.switch_page(self.mw.page_binds)
+        elif it["type"] == "ppv":
+            self.mw.switch_page(self.mw.page_ppv)
+            self.mw.page_ppv.cmb.setCurrentText(it["category"])
+        else:
+            self.mw.switch_page(self.mw.page_mail)
+            self.mw.page_mail.cmb.setCurrentText(it["category"])
+        self.accept()
+
+class OnboardingOverlay(QtWidgets.QFrame):
+    def __init__(self, mw: 'MainWindow'):
+        super().__init__(mw)
+        self.mw = mw
+        self.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents, False)
+        self.setAttribute(QtCore.Qt.WA_TranslucentBackground, True)
+        self.setObjectName("Onboarding")
+        self.setGeometry(mw.rect())
+
+        self.card = QtWidgets.QFrame(self)
+        self.card.setObjectName("OnboardingCard")
+        self.card.setFixedSize(520, 220)
+        self.title = QtWidgets.QLabel("Добро пожаловать", self.card)
+        self.title.setObjectName("Title")
+        self.text = QtWidgets.QLabel("", self.card)
+        self.text.setWordWrap(True)
+        self.btn_skip = QtWidgets.QPushButton("Пропустить", self.card)
+        self.btn_back = QtWidgets.QPushButton("Назад", self.card)
+        self.btn_next = QtWidgets.QPushButton("Далее", self.card)
+
+        v = QtWidgets.QVBoxLayout(self.card)
+        v.addWidget(self.title)
+        v.addWidget(self.text, 1)
+        row = QtWidgets.QHBoxLayout()
+        row.addWidget(self.btn_skip)
+        row.addStretch(1)
+        row.addWidget(self.btn_back)
+        row.addWidget(self.btn_next)
+        v.addLayout(row)
+
+        self.lens = QtWidgets.QFrame(self)
+        self.lens.setStyleSheet(
+            "QFrame{border: 2px solid rgba(255,255,255,0.85); border-radius: 18px; background: rgba(255,255,255,0.08);}"
+        )
+        self.lens.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents, True)
+
+        self.steps = [
+            {"title": "Бинды", "text": "Создавай бинды, включай/выключай и копируй в один клик.", "target": lambda: mw.page_binds.table, "page": lambda: mw.switch_page(mw.page_binds)},
+            {"title": "PPV", "text": "PPV — быстрый доступ и копирование.", "target": lambda: mw.page_ppv.lst, "page": lambda: mw.switch_page(mw.page_ppv)},
+            {"title": "Рассылка", "text": "Рассылки — шаблоны для быстрого ответа.", "target": lambda: mw.page_mail.lst, "page": lambda: mw.switch_page(mw.page_mail)},
+            {"title": "Поиск", "text": "Spotlight (Ctrl+K) для быстрого поиска.", "target": lambda: mw.btn_menu, "page": lambda: None},
+            {"title": "Темы", "text": "Смену темы и плотности ищи в меню.", "target": lambda: mw.titlebar.btn_theme, "page": lambda: None},
+        ]
+        self.index = 0
+        self.btn_skip.clicked.connect(self.finish)
+        self.btn_back.clicked.connect(self.prev_step)
+        self.btn_next.clicked.connect(self.next_step)
+        self.update_step()
+        self.show()
+        self.raise_()
+        self.card.raise_()
+
+    def resizeEvent(self, e):
+        super().resizeEvent(e)
+        self.setGeometry(self.mw.rect())
+        self._position_card()
+        self._position_lens()
+
+    def paintEvent(self, e):
+        p = QtGui.QPainter(self)
+        p.setRenderHint(QtGui.QPainter.Antialiasing, True)
+        p.fillRect(self.rect(), QtGui.QColor(6, 6, 16, 140))
+
+    def _position_card(self):
+        self.card.move(self.width() - self.card.width() - 24, 24)
+        self.card.raise_()
+
+    def _position_lens(self):
+        target = self._target_rect()
+        pad = 8
+        rect = QtCore.QRect(target.x() - pad, target.y() - pad, target.width() + pad * 2, target.height() + pad * 2)
+        self.lens.setGeometry(rect)
+
+    def _target_rect(self) -> QtCore.QRect:
+        try:
+            w = self.steps[self.index]["target"]()
+            if not w:
+                return QtCore.QRect(40, 40, 200, 80)
+            g = w.rect()
+            top_left = w.mapToGlobal(g.topLeft())
+            local = self.mapFromGlobal(top_left)
+            return QtCore.QRect(local, g.size())
+        except Exception:
+            return QtCore.QRect(40, 40, 200, 80)
+
+    def update_step(self):
+        step = self.steps[self.index]
+        try:
+            if step.get("page"):
+                step["page"]()
+        except Exception:
+            pass
+        self.title.setText(step["title"])
+        self.text.setText(step["text"])
+        self.btn_back.setEnabled(self.index > 0)
+        self.btn_next.setText("Готово" if self.index == len(self.steps) - 1 else "Далее")
+        self._position_card()
+        self._animate_lens()
+
+    def _animate_lens(self):
+        target = self._target_rect()
+        pad = 8
+        rect = QtCore.QRect(target.x() - pad, target.y() - pad, target.width() + pad * 2, target.height() + pad * 2)
+        if self.card.geometry().intersects(rect):
+            self.card.move(self.width() - self.card.width() - 24, rect.bottom() + 16)
+            if self.card.geometry().intersects(rect):
+                self.card.move(self.width() - self.card.width() - 24, max(24, rect.y() - self.card.height() - 16))
+        self.card.raise_()
+        self.card.raise_()
+        anim = QtCore.QPropertyAnimation(self.lens, b"geometry", self)
+        anim.setDuration(240)
+        anim.setStartValue(self.lens.geometry())
+        anim.setEndValue(rect)
+        anim.setEasingCurve(QtCore.QEasingCurve.OutCubic)
+        anim.start(QtCore.QAbstractAnimation.DeleteWhenStopped)
+
+    def next_step(self):
+        if self.index >= len(self.steps) - 1:
+            self.finish()
+            return
+        self.index += 1
+        self.update_step()
+
+    def prev_step(self):
+        self.index = max(0, self.index - 1)
+        self.update_step()
+
+    def finish(self):
+        self.hide()
+        self.deleteLater()
+        try:
+            self.mw.g["onboarding_seen"] = True
+            save_settings(self.mw.g)
+        except Exception:
+            pass
+
 # ---------- Binder engine ----------
 class BinderEngine(QtCore.QObject):
     status = QtCore.Signal(str)
@@ -716,6 +1319,9 @@ class BinderEngine(QtCore.QObject):
         self.enabled = True
         self._hotkeys = []
         self.binds: list[Bind] = []
+        self._text_hook = None
+        self._text_buffer = ""
+        self._injecting = False
 
     def set_enabled(self, on: bool):
         self.enabled = bool(on)
@@ -730,6 +1336,13 @@ class BinderEngine(QtCore.QObject):
             except Exception:
                 pass
         self._hotkeys = []
+        if self._text_hook is not None:
+            try:
+                keyboard.unhook(self._text_hook)
+            except Exception:
+                pass
+            self._text_hook = None
+            self._text_buffer = ""
 
     def apply_binds(self, binds: list[Bind]):
         self.binds = binds[:]
@@ -748,7 +1361,45 @@ class BinderEngine(QtCore.QObject):
                 self._hotkeys.append(hk)
             except Exception:
                 pass
+        self._setup_text_triggers()
         self.status.emit("Горячие клавиши обновлены")
+
+    def _setup_text_triggers(self):
+        if keyboard is None:
+            return
+        triggers = [b for b in self.binds if b.enabled and b.kind == "text" and b.key.strip()]
+        if not triggers:
+            return
+
+        def on_key(e):
+            if self._injecting or not self.enabled:
+                return
+            name = (e.name or "").lower()
+            if name in ("space", "enter", "tab"):
+                self._text_buffer += " "
+            elif len(name) == 1:
+                self._text_buffer += name
+            elif name == "backspace":
+                self._text_buffer = self._text_buffer[:-1]
+            else:
+                return
+            self._text_buffer = self._text_buffer[-120:]
+            for b in triggers:
+                trig = b.key.strip().lower()
+                if trig and self._text_buffer.endswith(trig):
+                    try:
+                        self._injecting = True
+                        for _ in range(len(trig)):
+                            keyboard.send("backspace")
+                        keyboard.write(b.text, delay=0.0)
+                        self._text_buffer = ""
+                    finally:
+                        self._injecting = False
+
+        try:
+            self._text_hook = keyboard.on_release(on_key)
+        except Exception:
+            self._text_hook = None
 
     def _fire(self, b: Bind):
         if not self.enabled:
@@ -793,16 +1444,23 @@ class BindsPage(QtWidgets.QWidget):
         self.table.verticalHeader().setVisible(False)
         self.table.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
         self.table.cellClicked.connect(self._cell_clicked)
+        self.table.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
+        self.table.customContextMenuRequested.connect(self._open_context_menu)
 
         btns1 = QtWidgets.QHBoxLayout()
-        self.btn_add = QtWidgets.QPushButton("Добавить")
-        self.btn_edit = QtWidgets.QPushButton("Редактировать")
-        self.btn_del = QtWidgets.QPushButton("Удалить")
-        self.btn_dup = QtWidgets.QPushButton("Дублировать")
+        self.btn_add = QtWidgets.QPushButton("Добавить"); self.btn_add.setIcon(icon_svg("add"))
+        self.btn_edit = QtWidgets.QPushButton("Редактировать"); self.btn_edit.setIcon(icon_svg("edit"))
+        self.btn_del = QtWidgets.QPushButton("Удалить"); self.btn_del.setIcon(icon_svg("delete"))
+        self.btn_dup = QtWidgets.QPushButton("Дублировать"); self.btn_dup.setIcon(icon_svg("copy"))
+        self.btn_copy = QtWidgets.QPushButton("Copy"); self.btn_copy.setIcon(icon_svg("copy"))
+        self.btn_toggle_table = QtWidgets.QPushButton("Свернуть список")
+        self.btn_del.setObjectName("Danger")
         btns1.addWidget(self.btn_add)
         btns1.addWidget(self.btn_edit)
         btns1.addWidget(self.btn_del)
         btns1.addWidget(self.btn_dup)
+        btns1.addWidget(self.btn_copy)
+        btns1.addWidget(self.btn_toggle_table)
         btns1.addStretch(1)
 
         self.btn_engine = QtWidgets.QPushButton("Бинды включены")
@@ -820,9 +1478,16 @@ class BindsPage(QtWidgets.QWidget):
         btns2.addWidget(self.btn_mass_move)
         btns2.addStretch(1)
 
+        self.table_card = QtWidgets.QFrame()
+        self.table_card.setObjectName("Card")
+        table_lay = QtWidgets.QVBoxLayout(self.table_card)
+        table_lay.setContentsMargins(10, 10, 10, 10)
+        table_lay.addWidget(self.table)
+        self._table_expanded = True
+
         lay = QtWidgets.QVBoxLayout(self)
         lay.addLayout(top)
-        lay.addWidget(self.table, 1)
+        lay.addWidget(self.table_card, 1)
         lay.addLayout(btns1)
         lay.addLayout(btns2)
 
@@ -830,6 +1495,8 @@ class BindsPage(QtWidgets.QWidget):
         self.btn_edit.clicked.connect(self.edit_bind)
         self.btn_del.clicked.connect(self.delete_binds)
         self.btn_dup.clicked.connect(self.duplicate_bind)
+        self.btn_copy.clicked.connect(self.copy_bind)
+        self.btn_toggle_table.clicked.connect(self.toggle_table)
         self.btn_engine.toggled.connect(self._toggle_engine)
         self.btn_mass_on.clicked.connect(lambda: self.mass_enable(True))
         self.btn_mass_off.clicked.connect(lambda: self.mass_enable(False))
@@ -845,11 +1512,13 @@ class BindsPage(QtWidgets.QWidget):
         self.cmb_cat.blockSignals(False)
 
     def refresh(self):
+        old_geom = self.table.geometry()
         self.table.setRowCount(0)
         cat = self.cmb_cat.currentText()
         binds = self.mw.binds
         if cat and cat != "Все":
             binds = [b for b in binds if b.category == cat]
+        binds = sorted(binds, key=lambda b: (not b.favorite, b.category, b.key))
         for b in binds:
             r = self.table.rowCount()
             self.table.insertRow(r)
@@ -860,13 +1529,41 @@ class BindsPage(QtWidgets.QWidget):
             self.table.setItem(r, 2, QtWidgets.QTableWidgetItem(b.kind))
             self.table.setItem(r, 3, QtWidgets.QTableWidgetItem(b.key))
             self.table.setItem(r, 4, QtWidgets.QTableWidgetItem(b.mode))
-            self.table.setItem(r, 5, QtWidgets.QTableWidgetItem("Да" if b.enabled else "Нет"))
+            status = QtWidgets.QTableWidgetItem("●" if b.enabled else "●")
+            status.setTextAlignment(QtCore.Qt.AlignCenter)
+            status.setForeground(QtGui.QBrush(QtGui.QColor(90, 230, 140) if b.enabled else QtGui.QColor(255, 120, 120)))
+            self.table.setItem(r, 5, status)
             prev = (b.text or "").replace("\n","  ")
             if len(prev) > 80:
-                prev = prev[:80] + "…"
-            self.table.setItem(r, 6, QtWidgets.QTableWidgetItem(prev))
+                short = prev[:80] + "…"
+            else:
+                short = prev
+            item = QtWidgets.QTableWidgetItem(short)
+            item.setToolTip(prev)
+            self.table.setItem(r, 6, item)
         self.table.resizeColumnsToContents()
         self.table.horizontalHeader().setSectionResizeMode(6, QtWidgets.QHeaderView.Stretch)
+        self._animate_table_reorder(old_geom)
+
+    def _animate_table_reorder(self, old_geom: QtCore.QRect):
+        try:
+            new_geom = self.table.geometry()
+            if old_geom == new_geom:
+                return
+            ghost = QtWidgets.QLabel(self.table.parentWidget())
+            pm = self.table.grab()
+            ghost.setPixmap(pm)
+            ghost.setGeometry(old_geom)
+            ghost.show()
+            anim = QtCore.QPropertyAnimation(ghost, b"geometry", ghost)
+            anim.setDuration(200)
+            anim.setStartValue(old_geom)
+            anim.setEndValue(new_geom)
+            anim.setEasingCurve(QtCore.QEasingCurve.OutCubic)
+            anim.start(QtCore.QAbstractAnimation.DeleteWhenStopped)
+            QtCore.QTimer.singleShot(220, ghost.deleteLater)
+        except Exception:
+            pass
 
     def selected_indices(self) -> list[int]:
         rows = sorted({i.row() for i in self.table.selectionModel().selectedRows()})
@@ -895,17 +1592,79 @@ class BindsPage(QtWidgets.QWidget):
             b.favorite = not b.favorite
             self.mw.save_all()
             self.refresh()
+            self._flash_row(row)
+            self._sparkle(row, col)
+            Anim.bounce(self.table, 140)
+
+    def _sparkle(self, row: int, col: int):
+        try:
+            rect = self.table.visualItemRect(self.table.item(row, col))
+            lbl = QtWidgets.QLabel("★", self.table.viewport())
+            lbl.setStyleSheet("QLabel{color: rgba(255,255,255,0.9); font-size: 18px;}")
+            lbl.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents, True)
+            start = rect.center() - QtCore.QPoint(6, 6)
+            lbl.move(start)
+            lbl.show()
+            eff = QtWidgets.QGraphicsOpacityEffect(lbl)
+            lbl.setGraphicsEffect(eff)
+            eff.setOpacity(0.0)
+            a1 = QtCore.QPropertyAnimation(eff, b"opacity", lbl)
+            a1.setStartValue(0.0); a1.setKeyValueAt(0.4, 1.0); a1.setEndValue(0.0)
+            a1.setDuration(420)
+            a2 = QtCore.QPropertyAnimation(lbl, b"pos", lbl)
+            a2.setStartValue(start); a2.setEndValue(start - QtCore.QPoint(0, 18))
+            a2.setDuration(420)
+            group = QtCore.QParallelAnimationGroup(lbl)
+            group.addAnimation(a1); group.addAnimation(a2)
+            group.start(QtCore.QAbstractAnimation.DeleteWhenStopped)
+            QtCore.QTimer.singleShot(450, lbl.deleteLater)
+        except Exception:
+            pass
+
+    def _open_context_menu(self, pos: QtCore.QPoint):
+        menu = QtWidgets.QMenu(self)
+        smooth_menu(menu)
+        act_edit = menu.addAction("Редактировать")
+        act_del = menu.addAction("Удалить")
+        act_dup = menu.addAction("Дублировать")
+        act_copy = menu.addAction("Copy")
+        menu.aboutToShow.connect(lambda: Anim.menu_pop(menu))
+        action = menu.exec(self.table.viewport().mapToGlobal(pos))
+        if action == act_edit:
+            self.edit_bind()
+        elif action == act_del:
+            self.delete_binds()
+        elif action == act_dup:
+            self.duplicate_bind()
+        elif action == act_copy:
+            self.copy_bind()
+
+    def _flash_row(self, row: int):
+        try:
+            for col in range(self.table.columnCount()):
+                item = self.table.item(row, col)
+                if item:
+                    item.setBackground(QtGui.QColor(255, 255, 255, 30))
+            QtCore.QTimer.singleShot(180, lambda: self.refresh())
+        except Exception:
+            pass
 
     def add_bind(self):
         dlg = BindEditor(self.mw.get_theme, self.mw, None, self.mw.categories)
         if dlg.exec() == QtWidgets.QDialog.Accepted and dlg.result_bind:
+            Anim.fade(self.table_card, 1.0, 0.0, 120)
             self.mw.binds.append(dlg.result_bind)
             if dlg.result_bind.category not in self.mw.categories:
                 self.mw.categories.append(dlg.result_bind.category)
             self.mw.save_all()
             self.mw.engine.apply_binds(self.mw.binds)
             self.setup_categories(self.mw.categories)
-            self.refresh()
+            QtCore.QTimer.singleShot(120, self._finish_add)
+
+    def _finish_add(self):
+        self.refresh()
+        Anim.pop(self.table, 160)
+        Anim.fade(self.table_card, 0.0, 1.0, 160)
 
     def edit_bind(self):
         idxs = self.selected_indices()
@@ -927,13 +1686,20 @@ class BindsPage(QtWidgets.QWidget):
         if not idxs:
             return
         idxs = sorted(idxs, reverse=True)
-        if QtWidgets.QMessageBox.question(self, "Удалить", f"Удалить выбранные бинды: {len(idxs)}?") != QtWidgets.QMessageBox.Yes:
+        dlg = ConfirmDialog(self.mw.get_theme, self, "Удалить", f"Удалить выбранные бинды: {len(idxs)}?")
+        if dlg.exec() != QtWidgets.QDialog.Accepted:
             return
+        Anim.fade(self.table_card, 1.0, 0.0, 140)
+        QtCore.QTimer.singleShot(140, lambda: self._finish_delete(idxs))
+
+    def _finish_delete(self, idxs: list[int]):
         for i in idxs:
             self.mw.binds.pop(i)
         self.mw.save_all()
         self.mw.engine.apply_binds(self.mw.binds)
         self.refresh()
+        Anim.fade(self.table_card, 0.0, 1.0, 160)
+        Anim.slide_in(self.table_card, dx=8, ms=160)
 
     def duplicate_bind(self):
         idxs = self.selected_indices()
@@ -946,6 +1712,38 @@ class BindsPage(QtWidgets.QWidget):
         self.mw.save_all()
         self.mw.engine.apply_binds(self.mw.binds)
         self.refresh()
+
+    def copy_bind(self):
+        idxs = self.selected_indices()
+        if len(idxs) != 1:
+            Toast(self, "Выбери 1 бинд.", kind="info").show_toast()
+            return
+        b = self.mw.binds[idxs[0]]
+        if pyperclip is not None:
+            pyperclip.copy(b.text)
+        else:
+            QtWidgets.QApplication.clipboard().setText(b.text)
+        Toast(self, "Бинд скопирован ✅", kind="info").show_toast()
+        Anim.bounce(self.btn_copy, 180)
+
+    def toggle_table(self):
+        try:
+            start = self.table_card.maximumHeight() if self.table_card.maximumHeight() > 0 else self.table_card.height()
+            if self._table_expanded:
+                end = 48
+                self.btn_toggle_table.setText("Развернуть список")
+            else:
+                end = 1000
+                self.btn_toggle_table.setText("Свернуть список")
+            self._table_expanded = not self._table_expanded
+            anim = QtCore.QPropertyAnimation(self.table_card, b"maximumHeight", self.table_card)
+            anim.setDuration(200)
+            anim.setStartValue(start)
+            anim.setEndValue(end)
+            anim.setEasingCurve(QtCore.QEasingCurve.OutCubic)
+            anim.start(QtCore.QAbstractAnimation.DeleteWhenStopped)
+        except Exception:
+            pass
 
     def mass_enable(self, on: bool):
         idxs = self.selected_indices()
@@ -972,6 +1770,7 @@ class BindsPage(QtWidgets.QWidget):
     def _toggle_engine(self, on: bool):
         self.btn_engine.setText("Бинды включены" if on else "Бинды выключены")
         self.mw.engine.set_enabled(on)
+        Anim.bounce(self.btn_engine, 180)
 
 class ContentPage(QtWidgets.QWidget):
     def __init__(self, mw: 'MainWindow', area: str, title: str, add_label: str):
@@ -1006,9 +1805,12 @@ class ContentPage(QtWidgets.QWidget):
 
         self.btn_menu = QtWidgets.QToolButton()
         self.btn_menu.setText("Меню")
+        self.btn_menu.setIcon(icon_svg("menu"))
         self.btn_menu.setPopupMode(QtWidgets.QToolButton.InstantPopup)
         self.menu = QtWidgets.QMenu(self)
+        smooth_menu(self.menu)
         self.btn_menu.setMenu(self.menu)
+        self.menu.aboutToShow.connect(lambda: Anim.menu_pop(self.menu))
         self.act_add = self.menu.addAction(add_label)
         self.act_import = self.menu.addAction("Импорт JSON…")
         self.act_export = self.menu.addAction("Экспорт JSON…")
@@ -1027,19 +1829,34 @@ class ContentPage(QtWidgets.QWidget):
         self.stats.setObjectName("Hint")
 
         self.btn_random = QtWidgets.QPushButton("Случайный текст")
-        self.btn_copy = QtWidgets.QPushButton("COPY")
+        self.btn_copy = QtWidgets.QPushButton("COPY"); self.btn_copy.setIcon(icon_svg("copy"))
+        self.btn_toggle_preview = QtWidgets.QPushButton("Свернуть просмотр")
 
         bottom = QtWidgets.QHBoxLayout()
         bottom.addWidget(self.btn_random)
         bottom.addStretch(1)
         bottom.addWidget(self.btn_copy)
+        bottom.addWidget(self.btn_toggle_preview)
 
         grid = QtWidgets.QGridLayout()
         grid.addLayout(head, 0, 0, 1, 2)
         grid.addWidget(QtWidgets.QLabel("Список:"), 1, 0)
         grid.addWidget(QtWidgets.QLabel("Просмотр:"), 1, 1)
-        grid.addWidget(self.lst, 2, 0)
-        grid.addWidget(self.preview, 2, 1)
+        list_card = QtWidgets.QFrame()
+        list_card.setObjectName("Card")
+        list_lay = QtWidgets.QVBoxLayout(list_card)
+        list_lay.setContentsMargins(10, 10, 10, 10)
+        list_lay.addWidget(self.lst)
+
+        self.prev_card = QtWidgets.QFrame()
+        self.prev_card.setObjectName("Card")
+        prev_lay = QtWidgets.QVBoxLayout(self.prev_card)
+        prev_lay.setContentsMargins(10, 10, 10, 10)
+        prev_lay.addWidget(self.preview)
+        self._preview_expanded = True
+
+        grid.addWidget(list_card, 2, 0)
+        grid.addWidget(self.prev_card, 2, 1)
         grid.addWidget(self.hint, 3, 1)
         grid.addLayout(bottom, 4, 0, 1, 2)
         grid.setRowStretch(2, 1)
@@ -1050,6 +1867,7 @@ class ContentPage(QtWidgets.QWidget):
         self.lst.currentRowChanged.connect(self._sel_changed)
         self.btn_random.clicked.connect(self.pick_random)
         self.btn_copy.clicked.connect(self.copy_current)
+        self.btn_toggle_preview.clicked.connect(self.toggle_preview)
 
         self.act_add.triggered.connect(self.add_item)
         self.act_import.triggered.connect(self.import_items)
@@ -1062,6 +1880,25 @@ class ContentPage(QtWidgets.QWidget):
     def _set_today(self, on: bool):
         self.only_today = bool(on)
         self.refresh()
+
+    def toggle_preview(self):
+        try:
+            start = self.prev_card.maximumHeight() if self.prev_card.maximumHeight() > 0 else self.prev_card.height()
+            if self._preview_expanded:
+                end = 40
+                self.btn_toggle_preview.setText("Развернуть просмотр")
+            else:
+                end = 1000
+                self.btn_toggle_preview.setText("Свернуть просмотр")
+            self._preview_expanded = not self._preview_expanded
+            anim = QtCore.QPropertyAnimation(self.prev_card, b"maximumHeight", self.prev_card)
+            anim.setDuration(200)
+            anim.setStartValue(start)
+            anim.setEndValue(end)
+            anim.setEasingCurve(QtCore.QEasingCurve.OutCubic)
+            anim.start(QtCore.QAbstractAnimation.DeleteWhenStopped)
+        except Exception:
+            pass
 
     def _cat_changed(self, cat: str):
         self.current_cat = cat
@@ -1079,9 +1916,9 @@ class ContentPage(QtWidgets.QWidget):
         items = self._items_filtered()
         for it in items:
             txt = (it.get("text") or "").replace("\n"," ")
-            if len(txt) > 60:
-                txt = txt[:60] + "…"
-            self.lst.addItem(txt)
+            short = txt[:60] + "…" if len(txt) > 60 else txt
+            item = QtWidgets.QListWidgetItem(short)
+            self.lst.addItem(item)
         self.preview.setPlainText("")
         self.hint.setText("Подсказка по контенту: —")
         self._update_stats()
@@ -1118,6 +1955,7 @@ class ContentPage(QtWidgets.QWidget):
             if text.strip():
                 self.db.add(self.area, self.current_cat, text, hint)
                 self.refresh()
+                Anim.pop(self.lst, 160)
 
     def edit_item(self):
         it = self._current_item()
@@ -1133,10 +1971,12 @@ class ContentPage(QtWidgets.QWidget):
         it = self._current_item()
         if not it:
             return
-        if QtWidgets.QMessageBox.question(self, "Удалить", "Удалить выбранный текст?") != QtWidgets.QMessageBox.Yes:
+        dlg = ConfirmDialog(self.mw.get_theme, self, "Удалить", "Удалить выбранный текст?")
+        if dlg.exec() != QtWidgets.QDialog.Accepted:
             return
         self.db.delete(self.area, self.current_cat, it["id"])
         self.refresh()
+        Anim.fade(self.lst, 0.0, 1.0, 160)
 
     def pick_random(self):
         it = self.db.pick_random(self.area, self.current_cat, self.only_today)
@@ -1160,13 +2000,15 @@ class ContentPage(QtWidgets.QWidget):
             QtWidgets.QApplication.clipboard().setText(text)
         self.db.mark_used(self.area, self.current_cat, it["id"], as_copy=True)
         self._update_stats()
+        Toast(self, "Скопировано ✅", kind="info").show_toast()
+        Anim.bounce(self.btn_copy, 180)
 
     def import_items(self):
         fn, _ = QtWidgets.QFileDialog.getOpenFileName(self, "Импорт JSON", "", "JSON (*.json)")
         if not fn:
             return
         n = self.db.import_json(self.area, self.current_cat, Path(fn))
-        QtWidgets.QMessageBox.information(self, "Импорт", f"Добавлено: {n}")
+        Toast(self, f"Добавлено: {n}", kind="info").show_toast()
         self.refresh()
 
     def export_items(self):
@@ -1174,7 +2016,7 @@ class ContentPage(QtWidgets.QWidget):
         if not fn:
             return
         self.db.export_json(self.area, self.current_cat, Path(fn))
-        QtWidgets.QMessageBox.information(self, "Экспорт", "Готово")
+        Toast(self, "Экспорт завершён", kind="info").show_toast()
 
 class PricePage(QtWidgets.QWidget):
     def __init__(self, mw: 'MainWindow'):
@@ -1184,8 +2026,13 @@ class PricePage(QtWidgets.QWidget):
         lbl = QtWidgets.QLabel("Прайс"); lbl.setObjectName("Title")
         self.text = QtWidgets.QPlainTextEdit()
         self.text.setReadOnly(True)
+        card = QtWidgets.QFrame()
+        card.setObjectName("Card")
+        card_lay = QtWidgets.QVBoxLayout(card)
+        card_lay.setContentsMargins(10, 10, 10, 10)
+        card_lay.addWidget(self.text)
         lay.addWidget(lbl)
-        lay.addWidget(self.text, 1)
+        lay.addWidget(card, 1)
         self.reload()
 
     def reload(self):
@@ -1200,18 +2047,42 @@ class Sidebar(QtWidgets.QFrame):
         self.l = QtWidgets.QVBoxLayout(self)
         self.l.setContentsMargins(10, 10, 10, 10)
         self.l.setSpacing(10)
+        self._buttons: list[QtWidgets.QToolButton] = []
+        self._indicator = QtWidgets.QFrame(self)
+        self._indicator.setStyleSheet(
+            "QFrame{background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.28); border-radius: 14px;}"
+        )
+        self._indicator.hide()
 
     def add_btn(self, text: str, icon_char: str, cb):
         b = QtWidgets.QToolButton()
         b.setToolButtonStyle(QtCore.Qt.ToolButtonTextBesideIcon)
         b.setText(text)
-        # Use emoji icon (always available) — avoids pixelated low-quality images
-        b.setIcon(QtGui.QIcon())  # keep empty; emoji in text is ok
-        b.setText(text)
-        b.clicked.connect(cb)
+        icon_map = {"Бинды": "copy", "PPV": "search", "Рассылка": "edit", "Прайс": "dollar"}
+        if text in icon_map:
+            b.setIcon(icon_svg(icon_map[text]))
+        b.clicked.connect(lambda: (self.set_active(b), cb()))
         b.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Fixed)
         self.l.addWidget(b)
+        self._buttons.append(b)
+        self._indicator.lower()
         return b
+
+    def set_active(self, btn: QtWidgets.QToolButton):
+        if btn not in self._buttons:
+            return
+        g = btn.geometry()
+        target = QtCore.QRect(g.x() - 4, g.y() - 3, g.width() + 8, g.height() + 6)
+        if not self._indicator.isVisible():
+            self._indicator.setGeometry(target)
+            self._indicator.show()
+            return
+        anim = QtCore.QPropertyAnimation(self._indicator, b"geometry", self)
+        anim.setDuration(180)
+        anim.setStartValue(self._indicator.geometry())
+        anim.setEndValue(target)
+        anim.setEasingCurve(QtCore.QEasingCurve.OutCubic)
+        anim.start(QtCore.QAbstractAnimation.DeleteWhenStopped)
 
 # ---------- Splash ----------
 class Splash(GlassDialog):
@@ -1269,6 +2140,7 @@ def set_status(self, txt: str, pct: int):
 class MainWindow(QtWidgets.QWidget):
     def __init__(self, g: dict):
         super().__init__()
+        self._closing = False
         self.g = g
         self._theme = self.g.get("theme", "Ametrine")
 
@@ -1298,6 +2170,7 @@ class MainWindow(QtWidgets.QWidget):
         head = QtWidgets.QHBoxLayout()
         self.btn_menu = QtWidgets.QToolButton()
         self.btn_menu.setText("Меню")
+        self.btn_menu.setIcon(icon_svg("menu"))
         self.btn_menu.setPopupMode(QtWidgets.QToolButton.InstantPopup)
         head.addWidget(self.btn_menu)
         head.addStretch(1)
@@ -1344,28 +2217,44 @@ class MainWindow(QtWidgets.QWidget):
         self.stack.addWidget(self.page_price)
 
         # Sidebar navigation (no emojis)
-        self.sidebar.add_btn("Бинды", "", lambda: self.switch_page(self.page_binds))
-        self.sidebar.add_btn("PPV", "", lambda: self.switch_page(self.page_ppv))
-        self.sidebar.add_btn("Рассылка", "", lambda: self.switch_page(self.page_mail))
-        self.sidebar.add_btn("Прайс", "", lambda: (self.page_price.reload(), self.switch_page(self.page_price)))
+        self.btn_binds = self.sidebar.add_btn("Бинды", "", lambda: self.switch_page(self.page_binds))
+        btn_ppv = self.sidebar.add_btn("PPV", "", lambda: self.switch_page(self.page_ppv))
+        btn_mail = self.sidebar.add_btn("Рассылка", "", lambda: self.switch_page(self.page_mail))
+        btn_price = self.sidebar.add_btn("Прайс", "", lambda: (self.page_price.reload(), self.switch_page(self.page_price)))
         self.sidebar.l.addStretch(1)
+        QtCore.QTimer.singleShot(0, lambda: self.sidebar.set_active(self.btn_binds))
 
         # Menu
         self.menu = QtWidgets.QMenu(self)
+        smooth_menu(self.menu)
         self.act_share = self.menu.addAction("Поделиться выбранным биндом (код)")
         self.act_import = self.menu.addAction("Импорт бинда (код)…")
         self.menu.addSeparator()
+        self.act_spotlight = self.menu.addAction("Поиск (Spotlight)")
+        self.act_onboarding = self.menu.addAction("Мастер новичка")
+        self.act_profile_overlay = self.menu.addAction("Оверлей профиля")
         self.act_categories = self.menu.addAction("Категории…")
         self.menu.addSeparator()
         theme_menu = self.menu.addMenu("Тема")
+        smooth_menu(theme_menu)
+        self.act_theme_preview = self.menu.addAction("Color preview темы")
+        self.act_theme_preview.triggered.connect(self.open_theme_preview)
         for name in THEMES.keys():
             a = theme_menu.addAction(name)
             a.triggered.connect(lambda checked=False, n=name: self.set_theme(n))
+        dens_menu = self.menu.addMenu("Плотность")
+        smooth_menu(dens_menu)
+        self.act_dense_compact = dens_menu.addAction("Compact")
+        self.act_dense_comfy = dens_menu.addAction("Comfortable")
         self.menu.addSeparator()
+        self.act_update = self.menu.addAction("Обновить")
         self.act_open_log = self.menu.addAction("Открыть лог")
         self.act_about = self.menu.addAction("О приложении")
 
         self.btn_menu.setMenu(self.menu)
+        self.menu.aboutToShow.connect(lambda: Anim.menu_pop(self.menu))
+        theme_menu.aboutToShow.connect(lambda: Anim.menu_pop(theme_menu))
+        dens_menu.aboutToShow.connect(lambda: Anim.menu_pop(dens_menu))
 
         # Connect menu actions
         try:
@@ -1383,6 +2272,13 @@ class MainWindow(QtWidgets.QWidget):
 
             pass
         self.act_categories.triggered.connect(self.open_categories)
+        self.act_spotlight.triggered.connect(self.open_spotlight)
+        self.act_onboarding.triggered.connect(self.open_onboarding)
+        self.act_profile_overlay.triggered.connect(self.toggle_profile_overlay)
+        self.act_update.triggered.connect(self.check_updates)
+        self.act_spotlight.setShortcut("Ctrl+K")
+        self.act_dense_compact.triggered.connect(lambda: self.set_density("compact"))
+        self.act_dense_comfy.triggered.connect(lambda: self.set_density("comfortable"))
         try:
 
             self.act_share.triggered.connect(self.share_selected_bind)
@@ -1407,6 +2303,7 @@ class MainWindow(QtWidgets.QWidget):
 
         # Show animation
         Anim.fade(self, 0.0, 1.0, 220)
+        self._glow = None
 
     # --- Helpers ---
     def get_theme(self) -> str:
@@ -1424,6 +2321,36 @@ class MainWindow(QtWidgets.QWidget):
             self.move(geo.topLeft())
         except Exception:
             pass
+        try:
+            QtCore.QTimer.singleShot(0, lambda: self.sidebar.set_active(self.btn_binds))
+        except Exception:
+            pass
+        try:
+            if not self.g.get("onboarding_seen", False):
+                self._onboarding = OnboardingOverlay(self)
+                self._onboarding.btn_skip.clicked.connect(self._finish_onboarding)
+        except Exception:
+            pass
+
+    def _finish_onboarding(self):
+        try:
+            self.g["onboarding_seen"] = True
+            save_settings(self.g)
+        except Exception:
+            pass
+
+    def closeEvent(self, e: QtGui.QCloseEvent):
+        if self._closing:
+            e.accept()
+            return
+        self._closing = True
+        try:
+            Anim.fade(self, 1.0, 0.0, 180)
+            Anim.slide_out(self, dy=12, ms=180)
+        except Exception:
+            pass
+        e.ignore()
+        QtCore.QTimer.singleShot(200, self.close)
 
     def switch_page(self, w: QtWidgets.QWidget):
         cur = self.stack.currentWidget()
@@ -1437,27 +2364,142 @@ class MainWindow(QtWidgets.QWidget):
         try:
             Anim.fade(w, 0.0, 1.0, 180)
             Anim.slide_in(w, dx=16, ms=180)
+            Anim.motion_blur(w, 180)
         except Exception:
             pass
 
     def open_theme_menu(self):
         m = QtWidgets.QMenu(self)
+        smooth_menu(m)
         for name in THEMES.keys():
             act = m.addAction(name)
             act.triggered.connect(lambda checked=False, n=name: self.set_theme(n))
+        m.aboutToShow.connect(lambda: Anim.menu_pop(m))
         m.exec(QtGui.QCursor.pos())
 
     def set_theme(self, name: str):
         self._theme = str(name)
         self.g["theme"] = self._theme
         save_settings(self.g)
-        QtWidgets.QApplication.instance().setStyleSheet(app_stylesheet(self._theme))
+        QtWidgets.QApplication.instance().setStyleSheet(
+            app_stylesheet(self._theme, self.g.get("density", "comfortable"))
+        )
+        self._theme_colors = THEMES.get(self._theme, THEMES["Ametrine"])
         try:
             Anim.fade(self.root, 0.0, 1.0, 220)
             Anim.slide_in(self.root, dx=10, ms=220)
         except Exception:
             pass
         self.root.update()
+
+
+    def set_density(self, density: str):
+        self.g["density"] = density
+        save_settings(self.g)
+        QtWidgets.QApplication.instance().setStyleSheet(
+            app_stylesheet(self._theme, self.g.get("density", "comfortable"))
+        )
+
+    def open_spotlight(self):
+        dlg = SpotlightDialog(self)
+        dlg.exec()
+
+    def open_onboarding(self):
+        try:
+            self._onboarding = OnboardingOverlay(self)
+        except Exception:
+            pass
+
+    def open_theme_preview(self):
+        try:
+            t = THEMES.get(self._theme, THEMES["Ametrine"])
+            dlg = GlassDialog(self.get_theme, self, 420, 260, "Color preview")
+            lay = QtWidgets.QVBoxLayout(dlg.body)
+            grid = QtWidgets.QGridLayout()
+            labels = {
+                "accent": "Акцент",
+                "surface": "Поверхность",
+                "bg1": "Фон 1",
+                "bg2": "Фон 2",
+                "bg3": "Фон 3",
+            }
+            for i, key in enumerate(["accent", "surface", "bg1", "bg2", "bg3"]):
+                sw = QtWidgets.QFrame()
+                sw.setFixedSize(48, 24)
+                sw.setStyleSheet(f"QFrame{{background:{t.get(key)}; border-radius:6px;}}")
+                lbl = QtWidgets.QLabel(labels.get(key, key))
+                row = i // 2
+                col = (i % 2) * 2
+                grid.addWidget(sw, row, col)
+                grid.addWidget(lbl, row, col + 1)
+            lay.addLayout(grid)
+            btn = QtWidgets.QPushButton("Закрыть")
+            btn.clicked.connect(dlg.accept)
+            lay.addWidget(btn, 0, QtCore.Qt.AlignRight)
+            dlg.exec()
+        except Exception:
+            pass
+
+    def check_updates(self):
+        try:
+            url = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
+            with urllib.request.urlopen(url, timeout=6) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+            tag = data.get("tag_name") or ""
+            assets = data.get("assets") or []
+            if not tag or tag == APP_VERSION:
+                Toast(self, "Обновлений нет.", kind="info").show_toast()
+                return
+            asset = next((a for a in assets if str(a.get("name", "")).endswith(".exe")), None)
+            if not asset:
+                Toast(self, "Не найден exe в релизе.", kind="error").show_toast()
+                return
+            dl = asset.get("browser_download_url")
+            if not dl:
+                return
+            dlg = GlassDialog(self.get_theme, self, 420, 220, "Обновление доступно")
+            lay = QtWidgets.QVBoxLayout(dlg.body)
+            lay.addWidget(QtWidgets.QLabel(f"Новая версия: {tag}"))
+            btn = QtWidgets.QPushButton("Обновить")
+            lay.addWidget(btn, 0, QtCore.Qt.AlignRight)
+            btn.clicked.connect(lambda: (dlg.accept(), self._download_update(dl)))
+            dlg.exec()
+        except Exception:
+            Toast(self, "Не удалось проверить обновления.", kind="error").show_toast()
+
+    def _download_update(self, url: str):
+        try:
+            self._update_overlay = UpdateOverlay(self)
+            tmp = DATA_DIR / "update.exe"
+            def report(count, block, total):
+                if total > 0:
+                    pct = int(count * block * 100 / total)
+                    self._update_overlay.set_progress(min(100, pct))
+                    QtWidgets.QApplication.processEvents()
+            urllib.request.urlretrieve(url, tmp, reporthook=report)
+            updater = DATA_DIR / "update.bat"
+            updater.write_text(
+                f"""@echo off
+timeout /t 1 >nul
+copy /Y "{tmp}" "{sys.argv[0]}"
+start "" "{sys.argv[0]}"
+""",
+                encoding="utf-8",
+            )
+            QtCore.QProcess.startDetached(str(updater))
+            QtWidgets.QApplication.instance().quit()
+        except Exception:
+            Toast(self, "Не удалось скачать обновление.", kind="error").show_toast()
+
+    def toggle_profile_overlay(self):
+        try:
+            if getattr(self, "_profile_overlay", None) and self._profile_overlay.isVisible():
+                self._profile_overlay.close()
+                return
+            self._profile_overlay = ProfileOverlay(self)
+            self._profile_overlay.show()
+        except Exception:
+            pass
 
     def save_all(self):
         save_profile(self.cmb_profile.currentText(), self.categories, self.binds)
@@ -1487,9 +2529,9 @@ class MainWindow(QtWidgets.QWidget):
         lay.addLayout(row)
 
         def add_cat():
-            name, ok = QtWidgets.QInputDialog.getText(dlg, "Новая", "Название:")
-            if ok:
-                name = name.strip()
+            inp = InputDialog(self.get_theme, dlg, "Новая", "Название:")
+            if inp.exec() == QtWidgets.QDialog.Accepted:
+                name = inp.get()
                 if name and name not in self.categories:
                     self.categories.append(name)
                     lst.addItem(name)
@@ -1499,9 +2541,9 @@ class MainWindow(QtWidgets.QWidget):
             if not it:
                 return
             old = it.text()
-            name, ok = QtWidgets.QInputDialog.getText(dlg, "Переименовать", "Название:", text=old)
-            if ok:
-                name = name.strip()
+            inp = InputDialog(self.get_theme, dlg, "Переименовать", "Название:", text=old)
+            if inp.exec() == QtWidgets.QDialog.Accepted:
+                name = inp.get()
                 if name and name not in self.categories:
                     self.categories = [name if c == old else c for c in self.categories]
                     for b in self.binds:
@@ -1516,7 +2558,9 @@ class MainWindow(QtWidgets.QWidget):
             name = it.text()
             if name == DEFAULT_BIND_CATEGORY:
                 return
-            if QtWidgets.QMessageBox.question(dlg, "Удалить", f"Удалить категорию «{name}»? Бинды перейдут в «{DEFAULT_BIND_CATEGORY}».") != QtWidgets.QMessageBox.Yes:
+            confirm = ConfirmDialog(self.get_theme, dlg, "Удалить",
+                                    f"Удалить категорию «{name}»? Бинды перейдут в «{DEFAULT_BIND_CATEGORY}».")
+            if confirm.exec() != QtWidgets.QDialog.Accepted:
                 return
             self.categories = [c for c in self.categories if c != name]
             for b in self.binds:
@@ -1537,15 +2581,15 @@ class MainWindow(QtWidgets.QWidget):
             self.page_binds.refresh()
 
 
-def open_log(self):
-    try:
-        path = os.path.join(DATA_DIR, "app.log")
-        if not os.path.exists(path):
-            with open(path, "w", encoding="utf-8") as f:
-                f.write("")
-        QtGui.QDesktopServices.openUrl(QtCore.QUrl.fromLocalFile(path))
-    except Exception:
-        QtWidgets.QMessageBox.information(self, "Лог", "Не удалось открыть лог-файл.")
+    def open_log(self):
+        try:
+            path = os.path.join(DATA_DIR, "app.log")
+            if not os.path.exists(path):
+                with open(path, "w", encoding="utf-8") as f:
+                    f.write("")
+            QtGui.QDesktopServices.openUrl(QtCore.QUrl.fromLocalFile(path))
+        except Exception:
+            Toast(self, "Не удалось открыть лог-файл.", kind="error").show_toast()
 
     def show_about(self):
         dlg = GlassDialog(self.get_theme, self, 680, 280, "О приложении")
@@ -1567,7 +2611,7 @@ def open_log(self):
         self.switch_page(self.page_binds)
         idxs = self.page_binds.selected_indices()
         if len(idxs) != 1:
-            QtWidgets.QMessageBox.information(self, "Поделиться", "Выбери 1 бинд.")
+            Toast(self, "Выбери 1 бинд.", kind="info").show_toast()
             return
         b = self.binds[idxs[0]]
         code = encode_share({"type": "bind", "bind": asdict(b)})
@@ -1609,6 +2653,8 @@ def load_settings() -> dict:
         s = {}
     s.setdefault("theme", "Ametrine")
     s.setdefault("profile", DEFAULT_PROFILES[0])
+    s.setdefault("density", "comfortable")
+    s.setdefault("onboarding_seen", False)
     return s
 
 def save_settings(s: dict):
@@ -1627,7 +2673,7 @@ def main():
     setup_logging()
 
     g = load_settings()
-    app.setStyleSheet(app_stylesheet(g.get("theme", "Ametrine")))
+    app.setStyleSheet(app_stylesheet(g.get("theme", "Ametrine"), g.get("density", "comfortable")))
 
     splash = Splash(lambda: g.get("theme", "Ametrine"))
     try:
@@ -1690,7 +2736,15 @@ def main():
         except Exception:
             pass
         try:
-            QtWidgets.QMessageBox.critical(None, "Ошибка запуска", str(e))
+            app = QtWidgets.QApplication.instance()
+            if app is not None:
+                host = QtWidgets.QWidget()
+                host.setWindowFlags(QtCore.Qt.Tool | QtCore.Qt.FramelessWindowHint)
+                host.resize(360, 120)
+                host.show()
+                Toast(host, f"Ошибка запуска: {e}", kind="error").show_toast()
+                QtCore.QTimer.singleShot(2200, host.close)
+                app.processEvents()
         except Exception:
             pass
         raise
