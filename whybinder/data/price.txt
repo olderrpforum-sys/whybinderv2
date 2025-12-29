@@ -1,4 +1,0 @@
-Whybinder - софт для чатера MATRIX TEAM
-powered by whynot_repow
-
-(Вставь сюда прайс. Файл читается из ./data/price.txt при каждом запуске и при открытии вкладки «Прайс».)
